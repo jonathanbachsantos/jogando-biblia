@@ -73,18 +73,18 @@ class HubScene extends Phaser.Scene {
       this.comprar('velocidade')
     )
 
-    this.infoText = this.add.text(400, 410, '', {
-      fontSize: '18px',
+    this.infoText = this.add.text(400, 405, '', {
+      fontSize: '15px',
       color: '#d8eee4',
       align: 'center',
-      lineSpacing: 8
+      lineSpacing: 4
     }).setOrigin(0.5)
 
     this.criarBotao(400, 495, 340, 64, 'ENTRAR NA FASE 1', () =>
       this.entrarNaFase()
     )
-    this.add.text(400, 565, 'Setas: mover  |  Shift: correr  |  Espaço: atacar  |  E: escudo', {
-      fontSize: '15px',
+    this.add.text(400, 552, '← → mover  |  Shift correr  |  Espaço/↑ pular\nE: usar escudo', {
+      fontSize: '14px',
       color: '#ffffff'
     }).setOrigin(0.5)
 
@@ -174,7 +174,7 @@ class HubScene extends Phaser.Scene {
       `${this.registry.get('moedas')} moedas  |  ${this.registry.get('vidas')} vidas`
     )
     this.infoText.setText(
-      `Escudo: ${habilidades.escudo ? 'comprado' : 'não comprado'}  |  ` +
+      `Escudo: ${habilidades.escudo ? 'comprado' : 'não comprado'}\n` +
       `Velocidade: ${habilidades.velocidade ? 'comprada' : 'não comprada'}`
     )
   }
@@ -195,8 +195,11 @@ class GameScene extends Phaser.Scene {
   }
 
   init() {
-    this.pontos = 0
     this.vidas = this.registry.get('vidas')
+    this.larguraFase = 1800
+    this.totalMoedasFase = 24
+    this.moedasColetadas = 0
+    this.saidaAberta = false
   }
 
   preload() {
@@ -237,18 +240,24 @@ class GameScene extends Phaser.Scene {
   }
 
   create() {
-    this.add.image(400, 300, 'background')
+    this.add.tileSprite(900, 300, this.larguraFase, 600, 'background')
 
     this.criarAnimacoes()
+    this.criarTexturaPlataforma()
+    this.criarTexturaRomano()
+    this.criarTexturasSaida()
 
-    this.player = this.physics.add.sprite(100, 300, 'idle-sheet', 0)
+    this.player = this.physics.add.sprite(80, 450, 'idle-sheet', 0)
 
-    this.player.setScale(2)
+    this.player.setScale(1.5)
     this.player.setCollideWorldBounds(true)
+    this.physics.world.setBounds(0, 0, this.larguraFase, 600)
+    this.physics.world.gravity.y = 900
+    this.cameras.main.setBounds(0, 0, this.larguraFase, 600)
+    this.cameras.main.startFollow(this.player, true, 0.08, 0)
 
-    // Ajuste da hitbox do jogador: foca apenas na área dos pés (20x20)
-    this.player.body.setSize(20, 20)
-    this.player.body.setOffset(15, 57) // Centraliza horizontalmente e desce para a base
+    this.player.body.setSize(16, 20)
+    this.player.body.setOffset(17, 53)
 
     this.player.play('idle')
 
@@ -258,7 +267,7 @@ class GameScene extends Phaser.Scene {
       Phaser.Input.Keyboard.KeyCodes.SHIFT
     )
 
-    this.attackKey = this.input.keyboard.addKey(
+    this.jumpKey = this.input.keyboard.addKey(
       Phaser.Input.Keyboard.KeyCodes.SPACE
     )
     this.shieldKey = this.input.keyboard.addKey(
@@ -268,23 +277,155 @@ class GameScene extends Phaser.Scene {
 
     this.itens = this.physics.add.group()
     this.inimigos = this.physics.add.group()
-    this.cenario = this.physics.add.staticGroup()
+    this.plataformas = this.physics.add.staticGroup()
 
     this.criarHUD()
-    this.criarCenario()
+    this.criarPlataformas()
     this.criarItens()
     this.criarInimigos()
+    this.criarSaida()
 
     this.physics.add.overlap(this.player, this.itens, this.coletar, null, this)
-    this.physics.add.collider(this.player, this.cenario)
+    this.physics.add.overlap(this.player, this.saida, this.chegarNaSaida, null, this)
+    this.physics.add.collider(this.player, this.plataformas)
+    this.physics.add.collider(this.inimigos, this.plataformas)
 
     this.physics.add.collider(
       this.player,
       this.inimigos,
-      this.tomarDano,
+      this.colidirComInimigo,
       null,
       this
     )
+  }
+
+  criarTexturaPlataforma() {
+    if (this.textures.exists('platform-texture')) return
+
+    const graphics = this.make.graphics({ x: 0, y: 0, add: false })
+    graphics.fillStyle(0x765033)
+    graphics.fillRect(0, 0, 96, 28)
+    graphics.fillStyle(0x4c3525)
+    graphics.fillRect(0, 8, 96, 20)
+    graphics.fillStyle(0x6eaa48)
+    graphics.fillRect(0, 0, 96, 8)
+    graphics.fillStyle(0x9bd05b)
+    graphics.fillRect(0, 0, 96, 3)
+    graphics.generateTexture('platform-texture', 96, 28)
+    graphics.destroy()
+  }
+
+  criarTexturaRomano() {
+    if (this.textures.exists('roman-guard')) return
+
+    const graphics = this.make.graphics({ x: 0, y: 0, add: false })
+    graphics.fillStyle(0x6d2924)
+    graphics.fillRoundedRect(10, 21, 21, 22, 4)
+    graphics.fillStyle(0xd5a45e)
+    graphics.fillRect(12, 21, 17, 4)
+    graphics.fillStyle(0xe4b77a)
+    graphics.fillCircle(20, 15, 9)
+    graphics.fillStyle(0xc69a45)
+    graphics.fillEllipse(20, 12, 22, 11)
+    graphics.fillStyle(0xe2bf67)
+    graphics.fillRect(11, 12, 18, 4)
+    graphics.fillStyle(0x8e3028)
+    graphics.fillPoints([
+      { x: 13, y: 9 },
+      { x: 17, y: 1 },
+      { x: 20, y: 10 },
+      { x: 24, y: 1 },
+      { x: 28, y: 10 }
+    ], true)
+    graphics.fillStyle(0x77431f)
+    graphics.fillEllipse(32, 29, 11, 15)
+    graphics.lineStyle(2, 0xe2bf67)
+    graphics.strokeEllipse(32, 29, 11, 15)
+    graphics.lineBetween(32, 22, 32, 36)
+    graphics.fillStyle(0x765033)
+    graphics.fillRect(13, 40, 6, 8)
+    graphics.fillRect(23, 40, 6, 8)
+    graphics.fillStyle(0xe2bf67)
+    graphics.fillRect(10, 46, 11, 2)
+    graphics.fillRect(21, 46, 11, 2)
+    graphics.generateTexture('roman-guard', 42, 50)
+    graphics.destroy()
+  }
+
+  criarTexturasSaida() {
+    if (this.textures.exists('saida-bloqueada')) return
+
+    const bloqueada = this.make.graphics({ x: 0, y: 0, add: false })
+    bloqueada.fillStyle(0x543a2d)
+    bloqueada.fillRoundedRect(5, 5, 60, 75, 20)
+    bloqueada.lineStyle(5, 0xd5a45e)
+    bloqueada.strokeRoundedRect(5, 5, 60, 75, 20)
+    bloqueada.fillStyle(0x281f2e)
+    bloqueada.fillRoundedRect(14, 17, 42, 63, 16)
+    bloqueada.lineStyle(4, 0x8e3028)
+    bloqueada.lineBetween(17, 27, 53, 67)
+    bloqueada.lineBetween(53, 27, 17, 67)
+    bloqueada.generateTexture('saida-bloqueada', 70, 85)
+    bloqueada.destroy()
+
+    const aberta = this.make.graphics({ x: 0, y: 0, add: false })
+    aberta.fillStyle(0x543a2d)
+    aberta.fillRoundedRect(5, 5, 60, 75, 20)
+    aberta.lineStyle(5, 0xffe08a)
+    aberta.strokeRoundedRect(5, 5, 60, 75, 20)
+    aberta.fillStyle(0x153b4a)
+    aberta.fillRoundedRect(14, 17, 42, 63, 16)
+    aberta.fillStyle(0x39c6c2, 0.8)
+    aberta.fillEllipse(35, 48, 30, 50)
+    aberta.fillStyle(0xc3fff0)
+    aberta.fillCircle(35, 48, 8)
+    aberta.generateTexture('saida-aberta', 70, 85)
+    aberta.destroy()
+  }
+
+  criarSaida() {
+    this.saida = this.physics.add.staticImage(
+      this.larguraFase - 55,
+      527,
+      'saida-bloqueada'
+    )
+    this.saida.setDepth(2)
+    this.saidaAbertaText = this.add.text(
+      400,
+      125,
+      'Saída bloqueada: pegue todas as moedas!',
+      { fontSize: '17px', color: '#ffe08a' }
+    ).setOrigin(0.5).setScrollFactor(0)
+  }
+
+  chegarNaSaida() {
+    if (this.moedasColetadas < this.totalMoedasFase) {
+      const faltam = this.totalMoedasFase - this.moedasColetadas
+      this.saidaAbertaText.setText(`Faltam ${faltam} moedas para abrir a saída.`)
+      return
+    }
+
+    this.scene.start('WinScene')
+  }
+
+  criarPlataformas() {
+    const plataformas = [
+      { x: 900, y: 585, largura: this.larguraFase, altura: 30 },
+      { x: 205, y: 480, largura: 150, altura: 28 },
+      { x: 420, y: 405, largura: 135, altura: 28 },
+      { x: 645, y: 330, largura: 155, altura: 28 },
+      { x: 870, y: 430, largura: 175, altura: 28 },
+      { x: 1100, y: 350, largura: 155, altura: 28 },
+      { x: 1330, y: 275, largura: 170, altura: 28 },
+      { x: 1570, y: 390, largura: 190, altura: 28 }
+    ]
+
+    plataformas.forEach(({ x, y, largura, altura }) => {
+      const plataforma = this.plataformas
+        .create(x, y, 'platform-texture')
+        .setDisplaySize(largura, altura)
+      plataforma.refreshBody()
+    })
   }
 
   criarHUD() {
@@ -299,26 +440,29 @@ class GameScene extends Phaser.Scene {
       )
 
       heart.setScale(2)
+      heart.setScrollFactor(0)
 
       this.hearts.push(heart)
     }
 
-    this.add.sprite(30, 80, 'items-sheet', FRAMES.ITEMS.COIN).setScale(2)
+    this.add.sprite(30, 80, 'items-sheet', FRAMES.ITEMS.COIN)
+      .setScale(2)
+      .setScrollFactor(0)
 
     this.scoreText = this.add.text(60, 68, this.registry.get('moedas').toString(), {
       fontSize: '28px',
       color: '#ffffff'
-    })
+    }).setScrollFactor(0)
 
     this.add.text(30, 115, 'MOEDAS', {
       fontSize: '14px',
       color: '#ffffff'
-    })
+    }).setScrollFactor(0)
 
-    this.phaseText = this.add.text(125, 80, `Fase: ${this.pontos}/100`, {
+    this.phaseText = this.add.text(125, 80, `Moedas: ${this.moedasColetadas}/${this.totalMoedasFase}`, {
       fontSize: '18px',
       color: '#ffffff'
-    })
+    }).setScrollFactor(0)
   }
 
   criarAnimacoes() {
@@ -342,128 +486,47 @@ class GameScene extends Phaser.Scene {
     criar('death', FRAMES.DEATH, 6, false, 'death-sheet')
   }
 
-  criarCenario() {
-    // Adicionando árvores em posições estratégicas (bloqueiam passagem)
-    const posicoesArvores = [
-      { x: 400, y: 120 },
-      { x: 150, y: 450 },
-      { x: 650, y: 500 }
-    ]
-
-    posicoesArvores.forEach(pos => {
-      const arvore = this.cenario
-        .create(pos.x, pos.y, 'hud-world-sheet', FRAMES.WORLD.TREE)
-        .setScale(2)
-      // Reduz hitbox da árvore para um ponto central pequeno
-      arvore.body.setSize(15, 15)
-      arvore.body.setOffset((arvore.width - 15) / 2, (arvore.height - 15) / 2)
-      arvore.refreshBody()
-    })
-
-    // Acampamento (Barraca e Fogueira)
-    const barraca = this.cenario
-      .create(650, 150, 'hud-world-sheet', FRAMES.WORLD.TENT)
-      .setScale(2)
-    barraca.body.setSize(25, 20)
-    barraca.body.setOffset((barraca.width - 25) / 2, (barraca.height - 20) / 2)
-    barraca.refreshBody()
-
-    const fogueira = this.cenario
-      .create(600, 170, 'hud-world-sheet', FRAMES.WORLD.FIRE)
-      .setScale(2)
-    fogueira.body.setSize(15, 15)
-    fogueira.body.setOffset(
-      (fogueira.width - 15) / 2,
-      (fogueira.height - 15) / 2
-    )
-    fogueira.refreshBody()
-
-    // Elementos interativos de cenário
-    const poco = this.cenario
-      .create(400, 500, 'hud-world-sheet', FRAMES.WORLD.WELL)
-      .setScale(2)
-    poco.body.setSize(25, 25)
-    poco.body.setOffset((poco.width - 25) / 2, (poco.height - 25) / 2)
-    poco.refreshBody()
-
-    const portal = this.cenario
-      .create(750, 300, 'hud-world-sheet', FRAMES.WORLD.PORTAL)
-      .setScale(2)
-    portal.body.setSize(30, 35)
-    portal.body.setOffset((portal.width - 30) / 2, (portal.height - 35) / 2)
-    portal.refreshBody()
-
-    // Decorações de fundo (não bloqueiam passagem)
-    this.add
-      .sprite(400, 60, 'hud-world-sheet', FRAMES.WORLD.RAINBOW)
-      .setScale(2)
-    this.add
-      .sprite(750, 240, 'hud-world-sheet', FRAMES.WORLD.TABLETS)
-      .setScale(1.5)
-  }
-
   criarItens() {
-    const itensConfig = [
-      { key: 'items-sheet', frame: FRAMES.ITEMS.BREAD, pontos: 10 },
-      { key: 'items-sheet', frame: FRAMES.ITEMS.FISH, pontos: 10 },
-      { key: 'items-sheet', frame: FRAMES.ITEMS.COIN, pontos: 10 },
-      { key: 'items-sheet', frame: FRAMES.ITEMS.SCROLL, pontos: 20 },
-      { key: 'hud-world-sheet', frame: FRAMES.HUD.CROWN, pontos: 50 },
-      { key: 'hud-world-sheet', frame: FRAMES.HUD.SHIELD, powerup: 'escudo' },
-      {
-        key: 'hud-world-sheet',
-        frame: FRAMES.HUD.LIGHTNING,
-        powerup: 'velocidade'
-      },
-      { key: 'hud-world-sheet', frame: FRAMES.WORLD.MAP, pontos: 40 }
+    const posicoesMoedas = [
+      [150, 440], [205, 440], [260, 440],
+      [370, 365], [420, 365], [470, 365],
+      [590, 290], [645, 290], [700, 290],
+      [820, 390], [870, 390], [920, 390],
+      [1045, 310], [1100, 310], [1155, 310],
+      [1275, 235], [1330, 235], [1385, 235],
+      [1515, 350], [1570, 350], [1625, 350],
+      [520, 545], [1000, 545], [1450, 545]
     ]
 
-    for (let i = 0; i < 12; i++) {
-      const config = Phaser.Utils.Array.GetRandom(itensConfig)
-      const item = this.itens.create(
-        Phaser.Math.Between(100, 700),
-        Phaser.Math.Between(100, 500),
-        config.key,
-        config.frame
-      )
-
-      item.setScale(2)
-
-      // Reduz a área de colisão para 20x20 e centraliza no sprite
-      item.body.setSize(20, 20)
-      item.body.setOffset((item.width - 20) / 2, (item.height - 20) / 2)
-
-      item.valorPontos = config.pontos || 0
-      item.powerup = config.powerup || null
-    }
+    posicoesMoedas.forEach(([x, y]) => {
+      const moeda = this.itens.create(x, y, 'items-sheet', FRAMES.ITEMS.COIN)
+      moeda.setScale(1.5)
+      moeda.body.setAllowGravity(false)
+      moeda.body.setImmovable(true)
+      moeda.body.setSize(18, 22)
+      moeda.valorPontos = 10
+      moeda.powerup = null
+      moeda.moedaDaFase = true
+    })
   }
 
   criarInimigos() {
-    for (let i = 0; i < 4; i++) {
-      const inimigo = this.inimigos.create(
-        Phaser.Math.Between(300, 700),
-        Phaser.Math.Between(100, 500),
-        'items-sheet',
-        FRAMES.ITEMS.ROCK
-      )
+    const guardas = [
+      { x: 320, plataformaY: 585, inicio: 250, fim: 420 },
+      { x: 645, plataformaY: 330, inicio: 590, fim: 700 },
+      { x: 1100, plataformaY: 350, inicio: 1045, fim: 1155 },
+      { x: 1570, plataformaY: 390, inicio: 1510, fim: 1630 }
+    ]
 
-      inimigo.setScale(2)
-
-      // Reduz a área de colisão dos inimigos (pedras) para facilitar a esquiva
-      inimigo.body.setSize(20, 20)
-      inimigo.body.setOffset(
-        (inimigo.width - 20) / 2,
-        (inimigo.height - 20) / 2
-      )
-
-      inimigo.setBounce(1)
-      inimigo.setCollideWorldBounds(true)
-
-      inimigo.setVelocity(
-        Phaser.Math.Between(-100, 100),
-        Phaser.Math.Between(-100, 100)
-      )
-    }
+    guardas.forEach(({ x, plataformaY, inicio, fim }) => {
+      const inimigo = this.inimigos.create(x, plataformaY - 38, 'roman-guard')
+      inimigo.setScale(1.4)
+      inimigo.body.setSize(24, 40)
+      inimigo.body.setAllowGravity(true)
+      inimigo.setVelocityX(70)
+      inimigo.setData('inicioPatrulha', inicio)
+      inimigo.setData('fimPatrulha', fim)
+    })
   }
 
   coletar(player, item) {
@@ -484,23 +547,41 @@ class GameScene extends Phaser.Scene {
       })
     }
 
-    // Pontuação
     const bonus = item.valorPontos || 0
     if (bonus > 0) {
-      this.pontos += bonus
       this.registry.set('moedas', this.registry.get('moedas') + bonus)
     } else if (!item.powerup) {
-      this.pontos += 10
       this.registry.set('moedas', this.registry.get('moedas') + 10)
     }
 
     item.destroy()
     this.scoreText.setText(this.registry.get('moedas').toString())
-    this.phaseText.setText(`Fase: ${this.pontos}/100`)
-
-    if (this.pontos >= 100) {
-      this.scene.start('WinScene')
+    if (item.moedaDaFase) {
+      this.moedasColetadas++
+      this.phaseText.setText(`Moedas: ${this.moedasColetadas}/${this.totalMoedasFase}`)
     }
+
+    if (this.moedasColetadas === this.totalMoedasFase && !this.saidaAberta) {
+      this.saidaAberta = true
+      this.saida.setTexture('saida-aberta')
+      this.saida.refreshBody()
+      this.saidaAbertaText.setText('Saída aberta! Vá até o fim da fase.')
+    }
+  }
+
+  colidirComInimigo(player, inimigo) {
+    if (
+      this.playerVelocidadeYAnterior > 0 &&
+      this.playerBottomAnterior <= inimigo.body.top + 12
+    ) {
+      inimigo.destroy()
+      player.setVelocityY(-320)
+      this.registry.set('moedas', this.registry.get('moedas') + 10)
+      this.scoreText.setText(this.registry.get('moedas').toString())
+      return
+    }
+
+    this.tomarDano()
   }
 
   tomarDano() {
@@ -519,7 +600,8 @@ class GameScene extends Phaser.Scene {
 
     this.player.setAlpha(0.5)
 
-    this.player.setPosition(100, 300)
+    this.player.setVelocity(0, 0)
+    this.player.setPosition(80, 450)
 
     this.time.delayedCall(1000, () => {
       this.player.invencivel = false
@@ -537,14 +619,11 @@ class GameScene extends Phaser.Scene {
 
   update() {
     if (!this.player.active) return
+    this.playerBottomAnterior = this.player.body.bottom
+    this.playerVelocidadeYAnterior = this.player.body.velocity.y
 
     if (Phaser.Input.Keyboard.JustDown(this.shieldKey) && this.habilidades.escudo) {
       this.ativarEscudo()
-    }
-
-    if (Phaser.Input.Keyboard.JustDown(this.attackKey)) {
-      this.player.play('attack', true)
-      return
     }
 
     let velocidade = this.habilidades.velocidade ? 200 : 150
@@ -555,7 +634,7 @@ class GameScene extends Phaser.Scene {
       velocidade = this.habilidades.velocidade ? 300 : 250
     }
 
-    this.player.setVelocity(0)
+    this.player.setVelocityX(0)
 
     let moving = false
 
@@ -571,17 +650,17 @@ class GameScene extends Phaser.Scene {
       moving = true
     }
 
-    if (this.cursors.up.isDown) {
-      this.player.setVelocityY(-velocidade)
-      moving = true
+    if (
+      (Phaser.Input.Keyboard.JustDown(this.jumpKey) ||
+        Phaser.Input.Keyboard.JustDown(this.cursors.up)) &&
+      this.player.body.onFloor()
+    ) {
+      this.player.setVelocityY(-450)
     }
 
-    if (this.cursors.down.isDown) {
-      this.player.setVelocityY(velocidade)
-      moving = true
-    }
-
-    if (moving) {
+    if (!this.player.body.onFloor()) {
+      this.player.play('idle', true)
+    } else if (moving) {
       if (this.shift.isDown) {
         this.player.play('run', true)
       } else {
@@ -590,6 +669,16 @@ class GameScene extends Phaser.Scene {
     } else {
       this.player.play('idle', true)
     }
+
+    this.inimigos.children.iterate(inimigo => {
+      if (!inimigo || !inimigo.active) return
+
+      const inicio = inimigo.getData('inicioPatrulha')
+      const fim = inimigo.getData('fimPatrulha')
+      if (inimigo.x <= inicio) inimigo.setVelocityX(70)
+      if (inimigo.x >= fim) inimigo.setVelocityX(-70)
+      inimigo.setFlipX(inimigo.body.velocity.x < 0)
+    })
   }
 
   ativarEscudo() {
