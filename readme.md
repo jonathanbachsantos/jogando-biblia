@@ -13,7 +13,7 @@ Este curso é focado em ensinar **Lógica de Programação** utilizando o motor 
 | **5** | Funções e Parâmetros | Organizar o código para criar itens aleatórios. |
 | **6** | Estruturas Condicionais | Sistema de vida, dano e invencibilidade. |
 | **7** | Estruturas de Repetição (Loops) | Criar vários inimigos e obstáculos de uma vez. |
-| **8** | Organização e Estados (Cenas) | Finalizar o jogo com Menu, Jogo e Vitória. |
+| **8** | Organização e Estados (Cenas) | Hub com loja de vidas e habilidades, fase e tela de vitória. |
 
 ## 🛠️ Como usar
 

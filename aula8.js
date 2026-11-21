@@ -30,47 +30,162 @@ const FRAMES = {
   }
 }
 
-class MenuScene extends Phaser.Scene {
+class HubScene extends Phaser.Scene {
   constructor() {
-    super('MenuScene')
+    super('HubScene')
   }
 
   create() {
-    this.cameras.main.setBackgroundColor('#1e1e1e')
+    this.cameras.main.setBackgroundColor('#17352e')
+    this.registry.set('moedas', this.registry.get('moedas') || 0)
+    this.registry.set('vidas', this.registry.has('vidas') ? this.registry.get('vidas') : 3)
+    this.registry.set('habilidades', this.registry.get('habilidades') || {
+      escudo: false,
+      velocidade: false
+    })
 
-    this.add.text(180, 120, 'A JORNADA DE JESUS', {
-      fontSize: '40px',
+    this.add.text(400, 55, 'ACAMPAMENTO', {
+      fontSize: '38px',
+      color: '#ffe08a',
+      fontStyle: 'bold'
+    }).setOrigin(0.5)
+    this.add.text(400, 100, 'Prepare-se para entrar na fase', {
+      fontSize: '20px',
       color: '#ffffff'
-    })
+    }).setOrigin(0.5)
 
-    this.add.text(220, 220, 'CONTROLES', {
-      fontSize: '28px',
-      color: '#ffff00'
-    })
-
-    this.add.text(180, 270, '⬅➡⬆⬇ = MOVER', {
-      fontSize: '22px',
+    this.balanceText = this.add.text(400, 140, '', {
+      fontSize: '20px',
       color: '#ffffff'
-    })
-
-    this.add.text(180, 310, 'SHIFT = CORRER', {
-      fontSize: '22px',
+    }).setOrigin(0.5)
+    this.statusText = this.add.text(400, 175, '', {
+      fontSize: '20px',
       color: '#ffffff'
-    })
+    }).setOrigin(0.5)
 
-    this.add.text(180, 350, 'ESPAÇO = ATACAR', {
-      fontSize: '22px',
-      color: '#ffffff'
-    })
-
-    this.add.text(120, 500, 'PRESSIONE ESPAÇO PARA COMEÇAR', {
-      fontSize: '28px',
-      color: '#00ff00'
-    })
-
-    this.input.keyboard.once('keydown-SPACE', () =>
-      this.scene.start('GameScene')
+    this.criarCompra(150, 'VIDA EXTRA', 'Mais um coração (máximo 5)', '20 moedas', () =>
+      this.comprar('vida')
     )
+    this.criarCompra(400, 'HABILIDADE: ESCUDO', 'E ativa proteção por 5 segundos', '50 moedas', () =>
+      this.comprar('escudo')
+    )
+    this.criarCompra(650, 'HABILIDADE: VELOCIDADE', 'Aumenta sua velocidade ao correr', '40 moedas', () =>
+      this.comprar('velocidade')
+    )
+
+    this.infoText = this.add.text(400, 410, '', {
+      fontSize: '18px',
+      color: '#d8eee4',
+      align: 'center',
+      lineSpacing: 8
+    }).setOrigin(0.5)
+
+    this.criarBotao(400, 495, 340, 64, 'ENTRAR NA FASE 1', () =>
+      this.entrarNaFase()
+    )
+    this.add.text(400, 565, 'Setas: mover  |  Shift: correr  |  Espaço: atacar  |  E: escudo', {
+      fontSize: '15px',
+      color: '#ffffff'
+    }).setOrigin(0.5)
+
+    this.atualizarPainel()
+    this.input.keyboard.once('keydown-SPACE', () => this.entrarNaFase())
+    this.input.keyboard.on('keydown-ONE', () => this.comprar('vida'))
+    this.input.keyboard.on('keydown-TWO', () => this.comprar('escudo'))
+    this.input.keyboard.on('keydown-THREE', () => this.comprar('velocidade'))
+  }
+
+  criarCompra(x, titulo, descricao, preco, acao) {
+    const card = this.add.rectangle(x, 290, 220, 180, 0x285548)
+      .setStrokeStyle(2, 0x9bc7a8)
+    card.setInteractive({ useHandCursor: true })
+    card.on('pointerdown', acao)
+    card.on('pointerover', () => card.setFillStyle(0x356b58))
+    card.on('pointerout', () => card.setFillStyle(0x285548))
+
+    this.add.text(x, 235, titulo, {
+      fontSize: '17px',
+      color: '#ffe08a',
+      align: 'center',
+      wordWrap: { width: 200 }
+    }).setOrigin(0.5)
+    this.add.text(x, 285, descricao, {
+      fontSize: '15px',
+      color: '#ffffff',
+      align: 'center',
+      wordWrap: { width: 190 }
+    }).setOrigin(0.5)
+    this.add.text(x, 345, preco, {
+      fontSize: '18px',
+      color: '#ffe08a'
+    }).setOrigin(0.5)
+  }
+
+  criarBotao(x, y, largura, altura, texto, acao) {
+    const botao = this.add.rectangle(x, y, largura, altura, 0x9b6b32)
+      .setStrokeStyle(3, 0xffe08a)
+    botao.setInteractive({ useHandCursor: true })
+    botao.on('pointerdown', acao)
+    botao.on('pointerover', () => botao.setFillStyle(0xb68143))
+    botao.on('pointerout', () => botao.setFillStyle(0x9b6b32))
+    this.add.text(x, y, texto, {
+      fontSize: '24px',
+      color: '#ffffff',
+      fontStyle: 'bold'
+    }).setOrigin(0.5)
+  }
+
+  comprar(tipo) {
+    const moedas = this.registry.get('moedas')
+    const vidas = this.registry.get('vidas')
+    const habilidades = this.registry.get('habilidades')
+    const compras = {
+      vida: { preco: 20, disponivel: vidas < 5 },
+      escudo: { preco: 50, disponivel: !habilidades.escudo },
+      velocidade: { preco: 40, disponivel: !habilidades.velocidade }
+    }
+    const compra = compras[tipo]
+
+    if (!compra.disponivel) {
+      this.statusText.setText(tipo === 'vida' ? 'Você já tem o máximo de vidas.' : 'Habilidade já comprada.')
+      return
+    }
+
+    if (moedas < compra.preco) {
+      this.statusText.setText('Moedas insuficientes para essa compra.')
+      return
+    }
+
+    this.registry.set('moedas', moedas - compra.preco)
+    if (tipo === 'vida') {
+      this.registry.set('vidas', vidas + 1)
+    } else {
+      habilidades[tipo] = true
+      this.registry.set('habilidades', habilidades)
+    }
+
+    this.statusText.setText('Compra realizada!')
+    this.atualizarPainel()
+  }
+
+  atualizarPainel() {
+    const habilidades = this.registry.get('habilidades')
+    this.balanceText.setText(
+      `${this.registry.get('moedas')} moedas  |  ${this.registry.get('vidas')} vidas`
+    )
+    this.infoText.setText(
+      `Escudo: ${habilidades.escudo ? 'comprado' : 'não comprado'}  |  ` +
+      `Velocidade: ${habilidades.velocidade ? 'comprada' : 'não comprada'}`
+    )
+  }
+
+  entrarNaFase() {
+    if (this.registry.get('vidas') <= 0) {
+      this.statusText.setText('Compre uma vida para entrar na fase.')
+      return
+    }
+
+    this.scene.start('GameScene')
   }
 }
 
@@ -81,7 +196,7 @@ class GameScene extends Phaser.Scene {
 
   init() {
     this.pontos = 0
-    this.vidas = 3
+    this.vidas = this.registry.get('vidas')
   }
 
   preload() {
@@ -146,6 +261,10 @@ class GameScene extends Phaser.Scene {
     this.attackKey = this.input.keyboard.addKey(
       Phaser.Input.Keyboard.KeyCodes.SPACE
     )
+    this.shieldKey = this.input.keyboard.addKey(
+      Phaser.Input.Keyboard.KeyCodes.E
+    )
+    this.habilidades = this.registry.get('habilidades')
 
     this.itens = this.physics.add.group()
     this.inimigos = this.physics.add.group()
@@ -186,8 +305,18 @@ class GameScene extends Phaser.Scene {
 
     this.add.sprite(30, 80, 'items-sheet', FRAMES.ITEMS.COIN).setScale(2)
 
-    this.scoreText = this.add.text(60, 68, '0', {
+    this.scoreText = this.add.text(60, 68, this.registry.get('moedas').toString(), {
       fontSize: '28px',
+      color: '#ffffff'
+    })
+
+    this.add.text(30, 115, 'MOEDAS', {
+      fontSize: '14px',
+      color: '#ffffff'
+    })
+
+    this.phaseText = this.add.text(125, 80, `Fase: ${this.pontos}/100`, {
+      fontSize: '18px',
       color: '#ffffff'
     })
   }
@@ -359,12 +488,15 @@ class GameScene extends Phaser.Scene {
     const bonus = item.valorPontos || 0
     if (bonus > 0) {
       this.pontos += bonus
+      this.registry.set('moedas', this.registry.get('moedas') + bonus)
     } else if (!item.powerup) {
       this.pontos += 10
+      this.registry.set('moedas', this.registry.get('moedas') + 10)
     }
 
     item.destroy()
-    this.scoreText.setText(this.pontos.toString())
+    this.scoreText.setText(this.registry.get('moedas').toString())
+    this.phaseText.setText(`Fase: ${this.pontos}/100`)
 
     if (this.pontos >= 100) {
       this.scene.start('WinScene')
@@ -379,6 +511,7 @@ class GameScene extends Phaser.Scene {
     this.player.play('hurt')
 
     this.vidas--
+    this.registry.set('vidas', this.vidas)
 
     if (this.hearts[this.vidas]) {
       this.hearts[this.vidas].destroy()
@@ -397,7 +530,7 @@ class GameScene extends Phaser.Scene {
       this.player.play('death')
 
       this.time.delayedCall(1500, () => {
-        this.scene.start('MenuScene')
+        this.scene.start('HubScene')
       })
     }
   }
@@ -405,17 +538,21 @@ class GameScene extends Phaser.Scene {
   update() {
     if (!this.player.active) return
 
+    if (Phaser.Input.Keyboard.JustDown(this.shieldKey) && this.habilidades.escudo) {
+      this.ativarEscudo()
+    }
+
     if (Phaser.Input.Keyboard.JustDown(this.attackKey)) {
       this.player.play('attack', true)
       return
     }
 
-    let velocidade = 150
+    let velocidade = this.habilidades.velocidade ? 200 : 150
 
     if (this.player.superVelocidade) {
       velocidade = 400
     } else if (this.shift.isDown) {
-      velocidade = 250
+      velocidade = this.habilidades.velocidade ? 300 : 250
     }
 
     this.player.setVelocity(0)
@@ -454,6 +591,19 @@ class GameScene extends Phaser.Scene {
       this.player.play('idle', true)
     }
   }
+
+  ativarEscudo() {
+    if (this.player.invencivel || this.time.now < (this.proximoEscudo || 0)) return
+
+    this.player.invencivel = true
+    this.player.setTint(0x00ffff)
+    this.proximoEscudo = this.time.now + 10000
+    this.time.delayedCall(5000, () => {
+      if (!this.player.active) return
+      this.player.invencivel = false
+      this.player.clearTint()
+    })
+  }
 }
 
 class WinScene extends Phaser.Scene {
@@ -474,13 +624,13 @@ class WinScene extends Phaser.Scene {
       color: '#ffffff'
     })
 
-    this.add.text(120, 420, 'PRESSIONE ESPAÇO PARA RECOMEÇAR', {
+    this.add.text(120, 420, 'PRESSIONE ESPAÇO PARA VOLTAR AO ACAMPAMENTO', {
       fontSize: '24px',
       color: '#ffff00'
     })
 
     this.input.keyboard.once('keydown-SPACE', () =>
-      this.scene.start('MenuScene')
+      this.scene.start('HubScene')
     )
   }
 }
@@ -503,7 +653,7 @@ const config = {
     }
   },
 
-  scene: [MenuScene, GameScene, WinScene]
+  scene: [HubScene, GameScene, WinScene]
 }
 
 new Phaser.Game(config)
